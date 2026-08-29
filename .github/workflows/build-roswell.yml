@@ -1,1 +1,37 @@
+name: Build roswell
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential git curl pkg-config libssl-dev protobuf-compiler clang llvm-dev libclang-dev make
+
+      - name: Setup Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Build hoonc
+        run: cargo build --release --bin hoonc -j 2
+
+      - name: Generate roswell.jam
+        run: |
+          ./target/release/hoonc --new --data-dir target/hoonc-new --output roswell.jam hoon/apps/roswell/roswell.hoon hoon
+          cp roswell.jam assets/roswell.jam
+
+      - name: Build roswell
+        run: cargo build --release -p roswell -j 2
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roswell-binary
+          path: target/release/roswell
 
