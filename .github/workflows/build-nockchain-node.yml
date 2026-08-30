@@ -8,8 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      PROTOC: protoc
 
     steps:
       - name: Checkout Code
@@ -19,8 +17,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential git curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
-          which protoc
-          protoc --version
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
