@@ -8,15 +8,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PROTOC: protoc
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install System Dependencies & Set PROTOC
+      - name: Install System Dependencies & Protobuf
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang libssl-dev pkg-config protobuf-compiler
-          echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
+          sudo apt-get install -y build-essential cmake clang libssl-dev pkg-config protobuf-compiler libprotobuf-dev
+
+      - name: Verify Protoc
+        run: protoc --version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
