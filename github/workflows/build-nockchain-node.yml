@@ -12,19 +12,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Protoc Compiler
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang libssl-dev pkg-config protobuf-compiler
+          sudo apt-get install -y build-essential cmake clang libssl-dev pkg-config
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build Node Binary
         run: cargo build --release
+        env:
+          PROTOC: protoc
 
       - name: Upload Node Binary
         uses: actions/upload-artifact@v4
         with:
           name: nockchain-node-binary
           path: target/release/nockchain
+
