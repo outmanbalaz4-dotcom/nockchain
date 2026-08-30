@@ -10,13 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code with LFS & Submodules
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           submodules: recursive
           lfs: true
 
-      - name: Install System Dependencies & Protoc
+      - name: Install System Dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
@@ -28,14 +28,20 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install Hoon Compiler (hoonc)
+      - name: Download OpenZeppelin Contracts Directly
         run: |
-          cargo install --path crates/hoonc || true
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          mkdir -p crates/bridge/lib
+          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts
+          echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
 
-      - name: Build Jam Assets & Node Binary
+      - name: Enable Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Build Node Binary
+        env:
+          CARGO_BUILD_JOBS: "2"
         run: |
-          make build || cargo build --release
+          cargo build --release
 
       - name: Upload Node Binary
         uses: actions/upload-artifact@v4
