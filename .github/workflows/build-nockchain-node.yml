@@ -8,9 +8,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PROTOC: protoc
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies & Protoc
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential git curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
+          which protoc
+          protoc --version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
