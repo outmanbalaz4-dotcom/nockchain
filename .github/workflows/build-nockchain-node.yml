@@ -10,13 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Code with LFS & Submodules
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
 
       - name: Install System Dependencies & Protoc
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential git curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
+          sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
           echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
 
       - name: Install Rust
