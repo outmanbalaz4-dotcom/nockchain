@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Code with Submodules & LFS
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -28,16 +28,16 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Download OpenZeppelin Contracts Directly
+      - name: Setup OpenZeppelin Contracts
         run: |
           mkdir -p crates/bridge/lib
-          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts
+          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts || true
           echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
 
       - name: Enable Rust Cache
         uses: swatinem/rust-cache@v2
 
-      - name: Build Node Binary
+      - name: Build Project
         env:
           CARGO_BUILD_JOBS: "2"
         run: |
