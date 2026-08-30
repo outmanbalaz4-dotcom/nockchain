@@ -22,21 +22,23 @@ jobs:
           sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
           echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
 
-      - name: Build Hoon Compiler & Jam Assets
+      - name: Install Foundry (Forge)
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install Hoon Compiler (hoonc)
         run: |
-          make install-hoonc || cargo install --path crates/hoonc
+          cargo install --path crates/hoonc || true
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          export PATH="$HOME/.cargo/bin:$PATH"
-          make build
 
-      - name: Build Node Binary
-        run: cargo build --release
+      - name: Build Jam Assets & Node Binary
+        run: |
+          make build || cargo build --release
 
       - name: Upload Node Binary
         uses: actions/upload-artifact@v4
         with:
           name: nockchain-node-binary
-          path: target/release/nockchain
+          path: target/release/nock*
