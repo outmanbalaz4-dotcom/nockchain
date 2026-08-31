@@ -6,7 +6,6 @@ on:
     branches: [ master ]
 
 env:
-  RUST_BACKTRACE: full
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -14,98 +13,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code with Submodules & LFS
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
           lfs: true
 
-      - name: Full Git LFS Sync
-        run: |
-          git lfs install
-          git lfs pull
-          git submodule update --init --recursive
-
-      - name: Increase Swap Memory
-        run: |
-          sudo swapoff -a || true
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-
-      - name: Install System Dependencies & LLD Linker
+      - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make lld
-          echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
+          sudo apt-get install -y -qq build-essential git curl pkg-config libssl-dev protobuf-compiler clang llvm-dev libclang-dev make lld
 
-      - name: Install Rust Nightly
+      - name: Setup Rust nightly
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Install Foundry (Forge)
-        uses: foundry-rs/foundry-toolchain@v1
+      - name: Build hoonc
+        run: cargo build --release --bin hoonc -j 2
 
-      - name: Setup Solidity Dependencies
+      - name: Bootstrap hoonc
+        run: ./target/release/hoonc --arbitrary hoon/trivial.hoon
+
+      - name: Generate dumb.jam
         run: |
-          rm -rf crates/bridge/lib/openzeppelin-contracts*
-          mkdir -p crates/bridge/lib
-          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts
-          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git crates/bridge/lib/openzeppelin-contracts-upgradeable
-          printf "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/\n@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\n" > crates/bridge/remappings.txt
-          cd crates/bridge && forge build --via-ir && cd ../..
+          ./target/release/hoonc --output dumb.jam hoon/apps/dumbnet/outer.hoon hoon
+          mv dumb.jam assets/dumb.jam
 
-      - name: Enable Rust Cache
-        uses: swatinem/rust-cache@v2
-
-      - name: Build Hoon Tools (hoonc & honk)
+      - name: Generate miner.jam
         run: |
-          cargo build --release --bin hoonc
-          cargo build --release --bin honk || true
-          sudo cp target/release/hoonc /usr/local/bin/
-          sudo cp target/release/honk /usr/local/bin/ 2>/dev/null || true
+          ./target/release/hoonc --output miner.jam hoon/apps/dumbnet/miner.hoon hoon
+          mv miner.jam assets/miner.jam
 
-      - name: Pre-generate ALL 6 Kernel JAM Assets Directly
-        run: |
-          # 1. إنشاء المجلدات المتوقعة من الطرفين
-          mkdir -p open/assets assets crates/nockchain/assets crates/bridge/assets
+      - name: Build nockchain node
+        run: cargo build --release --bin nockchain -j 2
 
-          # 2. توليد الملفات مباشرة داخل open/assets و assets
-          honk --dump-wrapper-assets || true
-
-          hoonc hoon/apps/dumbnet/outer.hoon -o open/assets/dumb.jam || true
-          hoonc hoon/apps/dumbnet/miner.hoon -o open/assets/miner.jam || true
-          hoonc hoon/apps/wallet/wallet.hoon -o open/assets/wal.jam || true
-          hoonc hoon/apps/peek/peek.hoon -o open/assets/peek.jam || true
-          hoonc hoon/apps/bridge/bridge.hoon -o open/assets/bridge.jam || true
-          hoonc hoon/apps/roswell/roswell.hoon -o open/assets/roswell.jam || true
-
-          # 3. تشغيل Makefile كبديل احتياطي
-          make assets || make kernel || make || true
-
-          # 4. نسخ كل الملفات المولدة لجميع المجلدات المتوقعة
-          find . -name "*.jam" -exec cp {} open/assets/ \; 2>/dev/null || true
-          find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
-          find . -name "*.jam" -exec cp {} crates/nockchain/assets/ \; 2>/dev/null || true
-
-      - name: Verify All JAM Assets Existence
-        run: |
-          echo "=== Checking open/assets Directory ==="
-          ls -la open/assets/
-          echo "=== Checking assets Directory ==="
-          ls -la assets/
-
-      - name: Build Node Binary
-        env:
-          CARGO_BUILD_JOBS: "2"
-          RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
-          CARGO_PROFILE_RELEASE_LTO: "false"
-          CARGO_PROFILE_RELEASE_DEBUG: "false"
-        run: |
-          cargo build --release --bin nockchain
-
-      - name: Upload Node Binary
+      - name: Upload node binary
         uses: actions/upload-artifact@v4
         with:
           name: nockchain-node-binary
-          path: target/release/nock*
+          path: target/release/nockchain
