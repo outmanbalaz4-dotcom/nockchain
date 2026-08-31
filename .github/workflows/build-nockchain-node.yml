@@ -5,16 +5,25 @@ on:
   push:
     branches: [ master ]
 
+env:
+  RUST_BACKTRACE: 1
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code with Submodules & LFS
+      - name: Checkout Code with LFS
         uses: actions/checkout@v4
         with:
           submodules: recursive
           lfs: true
+
+      - name: Force Git LFS Download
+        run: |
+          git lfs install
+          git lfs pull
+          git lfs checkout
 
       - name: Install System Dependencies
         run: |
@@ -28,20 +37,29 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Setup OpenZeppelin Contracts
-        run: |
-          mkdir -p crates/bridge/lib
-          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts || true
-          echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
-
       - name: Enable Rust Cache
         uses: swatinem/rust-cache@v2
 
-      - name: Build Project
+      - name: Build EVM Bridge Contracts First
+        run: |
+          mkdir -p crates/bridge/lib/openzeppelin-contracts
+          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts || true
+          echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
+          cd crates/bridge && forge build && cd ../..
+
+      - name: Ensure Hoon JAM Assets Exist
+        run: |
+          cargo build --release --bin hoonc
+          mkdir -p open/assets assets
+          ./target/release/hoonc assets/ || make assets || true
+          find . -name "*.jam" -exec cp {} open/assets/ \; 2>/dev/null || true
+          find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
+
+      - name: Build Nockchain Node Binary
         env:
           CARGO_BUILD_JOBS: "2"
         run: |
-          cargo build --release
+          cargo build --release --bin nockchain || cargo build --release
 
       - name: Upload Node Binary
         uses: actions/upload-artifact@v4
