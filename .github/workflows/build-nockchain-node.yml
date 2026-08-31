@@ -26,10 +26,10 @@ jobs:
           git lfs pull
           git submodule update --init --recursive
 
-      - name: Increase Swap Memory (Fix OOM Crash)
+      - name: Increase Swap Memory (Robust DD Method)
         run: |
-          sudo swapoff -a
-          sudo fallocate -l 4G /swapfile
+          sudo swapoff -a || true
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -93,9 +93,12 @@ jobs:
           echo "=== Verifying Required JAM Assets ==="
           ls -la assets/
 
-      - name: Build Node Binary
+      - name: Build Node Binary (OOM & RAM Optimization Flags)
         env:
           CARGO_BUILD_JOBS: "1"
+          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_DEBUG: "false"
         run: |
           cargo build --release --bin nockchain
 
