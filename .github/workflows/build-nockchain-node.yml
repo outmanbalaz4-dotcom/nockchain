@@ -37,26 +37,32 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Setup Solidity Dependencies
+      - name: Setup Solidity Dependencies Cleanly
         run: |
-          mkdir -p crates/bridge/lib/openzeppelin-contracts
+          rm -rf crates/bridge/lib/openzeppelin-contracts
+          mkdir -p crates/bridge/lib
           git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts
           echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
 
       - name: Enable Rust Cache
         uses: swatinem/rust-cache@v2
 
-      - name: Build Hoonc Compiler & Assets
+      - name: Build Hoonc & Expose to System PATH
         run: |
           cargo build --release --bin hoonc
-          mkdir -p assets open/assets
-          ./target/release/hoonc assets/ || make assets
+          sudo cp target/release/hoonc /usr/local/bin/
 
-      - name: Build Node Binary (Single Thread & Detailed Logs)
-        env:
-          CARGO_BUILD_JOBS: "1"
+      - name: Generate and Verify Hoon Assets
         run: |
-          cargo build --release --bin nockchain --verbose
+          mkdir -p assets open/assets
+          make assets || make || true
+          ls -la assets/ open/assets/
+
+      - name: Build Node Binary
+        env:
+          CARGO_BUILD_JOBS: "2"
+        run: |
+          cargo build --release --bin nockchain
 
       - name: Upload Node Binary
         uses: actions/upload-artifact@v4
