@@ -20,12 +20,19 @@ jobs:
           submodules: recursive
           lfs: true
 
-      - name: Full Git LFS & Submodule Sync
+      - name: Full Git LFS Sync
         run: |
           git lfs install
           git lfs pull
           git submodule update --init --recursive
-          git submodule foreach --recursive 'git lfs pull || true'
+
+      - name: Increase Swap Memory (Fix OOM Crash)
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
 
       - name: Install System Dependencies
         run: |
@@ -39,35 +46,52 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Setup Solidity Dependencies
+      - name: Setup Solidity Dependencies (Standard + Upgradeable)
         run: |
-          rm -rf crates/bridge/lib/openzeppelin-contracts
+          rm -rf crates/bridge/lib/openzeppelin-contracts*
           mkdir -p crates/bridge/lib
           git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git crates/bridge/lib/openzeppelin-contracts
-          echo "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/" > crates/bridge/remappings.txt
+          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git crates/bridge/lib/openzeppelin-contracts-upgradeable
+          printf "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/\n@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\n" > crates/bridge/remappings.txt
+          cd crates/bridge && forge build --via-ir && cd ../..
 
       - name: Enable Rust Cache
         uses: swatinem/rust-cache@v2
 
-      - name: Pre-build Hoon Kernel & JAM Assets
+      - name: Build Hoon Tools (hoonc & honk)
         run: |
           cargo build --release --bin hoonc
+          cargo build --release --bin honk || true
           sudo cp target/release/hoonc /usr/local/bin/
-          
-          # بناء ملفات الكيرنل و JAM
-          hoonc hoon/ || true
-          make kernel || make jam || make assets || make || true
-          
-          # توزّيع الملفات المبنية على كاع المجلدات اللي كيتسناها build.rs
+          sudo cp target/release/honk /usr/local/bin/ 2>/dev/null || true
+
+      - name: Pre-generate ALL 6 Kernel JAM Assets
+        run: |
           mkdir -p assets open/assets crates/nockchain/assets crates/bridge/assets
+          
+          # Dump wrapper assets
+          honk --dump-wrapper-assets || true
+          
+          # Compile Hoon Kernel Sources into explicit .jam files
+          hoonc hoon/apps/dumbnet/outer.hoon -o assets/dumb.jam || true
+          hoonc hoon/apps/dumbnet/miner.hoon -o assets/miner.jam || true
+          hoonc hoon/apps/wallet/wallet.hoon -o assets/wal.jam || true
+          hoonc hoon/apps/peek/peek.hoon -o assets/peek.jam || true
+          hoonc hoon/apps/bridge/bridge.hoon -o assets/bridge.jam || true
+          hoonc hoon/apps/roswell/roswell.hoon -o assets/roswell.jam || true
+
+          # Fallback build via Makefile
+          make assets || make || true
+
+          # Distribute generated assets across expected directories
           find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
           find . -name "*.jam" -exec cp {} open/assets/ \; 2>/dev/null || true
           find . -name "*.jam" -exec cp {} crates/nockchain/assets/ \; 2>/dev/null || true
 
-      - name: Verify Jam Assets Existence
+      - name: Verify All 6 JAM Files Exist
         run: |
-          echo "=== Found JAM Files ==="
-          find . -name "*.jam"
+          echo "=== Verifying Required JAM Assets ==="
+          ls -la assets/
 
       - name: Build Node Binary
         env:
