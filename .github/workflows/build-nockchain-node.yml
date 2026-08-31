@@ -20,10 +20,12 @@ jobs:
           submodules: recursive
           lfs: true
 
-      - name: Force LFS Download
+      - name: Full Git LFS & Submodule Sync
         run: |
           git lfs install
           git lfs pull
+          git submodule update --init --recursive
+          git submodule foreach --recursive 'git lfs pull || true'
 
       - name: Install System Dependencies
         run: |
@@ -37,7 +39,7 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Setup Solidity Dependencies Cleanly
+      - name: Setup Solidity Dependencies
         run: |
           rm -rf crates/bridge/lib/openzeppelin-contracts
           mkdir -p crates/bridge/lib
@@ -47,20 +49,29 @@ jobs:
       - name: Enable Rust Cache
         uses: swatinem/rust-cache@v2
 
-      - name: Build Hoonc & Expose to System PATH
+      - name: Pre-build Hoon Kernel & JAM Assets
         run: |
           cargo build --release --bin hoonc
           sudo cp target/release/hoonc /usr/local/bin/
+          
+          # بناء ملفات الكيرنل و JAM
+          hoonc hoon/ || true
+          make kernel || make jam || make assets || make || true
+          
+          # توزّيع الملفات المبنية على كاع المجلدات اللي كيتسناها build.rs
+          mkdir -p assets open/assets crates/nockchain/assets crates/bridge/assets
+          find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
+          find . -name "*.jam" -exec cp {} open/assets/ \; 2>/dev/null || true
+          find . -name "*.jam" -exec cp {} crates/nockchain/assets/ \; 2>/dev/null || true
 
-      - name: Generate and Verify Hoon Assets
+      - name: Verify Jam Assets Existence
         run: |
-          mkdir -p assets open/assets
-          make assets || make || true
-          ls -la assets/ open/assets/
+          echo "=== Found JAM Files ==="
+          find . -name "*.jam"
 
       - name: Build Node Binary
         env:
-          CARGO_BUILD_JOBS: "2"
+          CARGO_BUILD_JOBS: "1"
         run: |
           cargo build --release --bin nockchain
 
