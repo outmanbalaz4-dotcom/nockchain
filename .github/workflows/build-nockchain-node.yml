@@ -26,7 +26,7 @@ jobs:
           git lfs pull
           git submodule update --init --recursive
 
-      - name: Increase Swap Memory (Robust DD Method)
+      - name: Increase Swap Memory
         run: |
           sudo swapoff -a || true
           sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
@@ -34,10 +34,10 @@ jobs:
           sudo mkswap /swapfile
           sudo swapon /swapfile
 
-      - name: Install System Dependencies
+      - name: Install System Dependencies & LLD Linker
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make
+          sudo apt-get install -y -qq build-essential git git-lfs curl pkg-config libssl-dev protobuf-compiler libprotobuf-dev clang llvm-dev libclang-dev make lld
           echo "PROTOC=/usr/bin/protoc" >> $GITHUB_ENV
 
       - name: Install Rust Nightly
@@ -46,7 +46,7 @@ jobs:
       - name: Install Foundry (Forge)
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Setup Solidity Dependencies (Standard + Upgradeable)
+      - name: Setup Solidity Dependencies
         run: |
           rm -rf crates/bridge/lib/openzeppelin-contracts*
           mkdir -p crates/bridge/lib
@@ -65,39 +65,41 @@ jobs:
           sudo cp target/release/hoonc /usr/local/bin/
           sudo cp target/release/honk /usr/local/bin/ 2>/dev/null || true
 
-      - name: Pre-generate ALL 6 Kernel JAM Assets
+      - name: Pre-generate ALL 6 Kernel JAM Assets Directly
         run: |
-          mkdir -p assets open/assets crates/nockchain/assets crates/bridge/assets
-          
-          # Dump wrapper assets
+          # 1. إنشاء المجلدات المتوقعة من الطرفين
+          mkdir -p open/assets assets crates/nockchain/assets crates/bridge/assets
+
+          # 2. توليد الملفات مباشرة داخل open/assets و assets
           honk --dump-wrapper-assets || true
-          
-          # Compile Hoon Kernel Sources into explicit .jam files
-          hoonc hoon/apps/dumbnet/outer.hoon -o assets/dumb.jam || true
-          hoonc hoon/apps/dumbnet/miner.hoon -o assets/miner.jam || true
-          hoonc hoon/apps/wallet/wallet.hoon -o assets/wal.jam || true
-          hoonc hoon/apps/peek/peek.hoon -o assets/peek.jam || true
-          hoonc hoon/apps/bridge/bridge.hoon -o assets/bridge.jam || true
-          hoonc hoon/apps/roswell/roswell.hoon -o assets/roswell.jam || true
 
-          # Fallback build via Makefile
-          make assets || make || true
+          hoonc hoon/apps/dumbnet/outer.hoon -o open/assets/dumb.jam || true
+          hoonc hoon/apps/dumbnet/miner.hoon -o open/assets/miner.jam || true
+          hoonc hoon/apps/wallet/wallet.hoon -o open/assets/wal.jam || true
+          hoonc hoon/apps/peek/peek.hoon -o open/assets/peek.jam || true
+          hoonc hoon/apps/bridge/bridge.hoon -o open/assets/bridge.jam || true
+          hoonc hoon/apps/roswell/roswell.hoon -o open/assets/roswell.jam || true
 
-          # Distribute generated assets across expected directories
-          find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
+          # 3. تشغيل Makefile كبديل احتياطي
+          make assets || make kernel || make || true
+
+          # 4. نسخ كل الملفات المولدة لجميع المجلدات المتوقعة
           find . -name "*.jam" -exec cp {} open/assets/ \; 2>/dev/null || true
+          find . -name "*.jam" -exec cp {} assets/ \; 2>/dev/null || true
           find . -name "*.jam" -exec cp {} crates/nockchain/assets/ \; 2>/dev/null || true
 
-      - name: Verify All 6 JAM Files Exist
+      - name: Verify All JAM Assets Existence
         run: |
-          echo "=== Verifying Required JAM Assets ==="
+          echo "=== Checking open/assets Directory ==="
+          ls -la open/assets/
+          echo "=== Checking assets Directory ==="
           ls -la assets/
 
-      - name: Build Node Binary (OOM & RAM Optimization Flags)
+      - name: Build Node Binary
         env:
-          CARGO_BUILD_JOBS: "1"
+          CARGO_BUILD_JOBS: "2"
+          RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
           CARGO_PROFILE_RELEASE_LTO: "false"
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
           CARGO_PROFILE_RELEASE_DEBUG: "false"
         run: |
           cargo build --release --bin nockchain
